@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio de Redes con Network Namespaces</title>
+<meta name="description" content="Laboratorio de redes paso a paso con ip netns: desde dos PCs conectados hasta Tor y detección de ataques.">
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1a1d21; --muted:#5b6470;
+    --line:#e3e6ea; --accent:#2563eb; --accent-soft:#eaf0ff;
+    --code-bg:#0f172a; --code-ink:#e2e8f0; --ok:#15803d; --warn:#b45309; --bad:#b91c1c;
+    --radius:14px; --maxw:860px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#0e1116; --panel:#161b22; --ink:#e6edf3; --muted:#9aa4b2;
+      --line:#272e38; --accent:#6ea8fe; --accent-soft:#17233b;
+      --code-bg:#0b0f16; --code-ink:#d7e0ea; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0e1116; --panel:#161b22; --ink:#e6edf3; --muted:#9aa4b2;
+    --line:#272e38; --accent:#6ea8fe; --accent-soft:#17233b;
+    --code-bg:#0b0f16; --code-ink:#d7e0ea; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  header.hero{
+    padding:56px 16px 40px; text-align:center;
+    background:linear-gradient(180deg,var(--accent-soft),transparent);
+    border-bottom:1px solid var(--line);
+  }
+  header.hero h1{font-size:clamp(26px,5vw,40px); margin:0 0 10px; letter-spacing:-.02em}
+  header.hero p{color:var(--muted); max-width:620px; margin:0 auto; font-size:17px}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 16px}
+  nav.toc{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px 20px; margin:28px auto; max-width:var(--maxw);
+  }
+  nav.toc h2{margin:0 0 10px; font-size:14px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted)}
+  nav.toc ol{margin:0; padding-left:20px; columns:2; column-gap:28px}
+  @media (max-width:560px){nav.toc ol{columns:1}}
+  nav.toc a{color:var(--ink); text-decoration:none}
+  nav.toc a:hover{color:var(--accent); text-decoration:underline}
+  section.phase{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:26px 24px; margin:22px auto; max-width:var(--maxw);
+  }
+  .tag{
+    display:inline-block; font-size:12px; font-weight:700; letter-spacing:.06em;
+    color:var(--accent); background:var(--accent-soft); border-radius:999px;
+    padding:3px 11px; margin-bottom:12px;
+  }
+  section.phase h2{margin:.1em 0 .1em; font-size:22px; letter-spacing:-.01em}
+  .goal{color:var(--muted); margin:.4em 0 1.1em}
+  h3{font-size:15px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:1.4em 0 .5em}
+  p{margin:.6em 0}
+  ul,ol{margin:.5em 0; padding-left:22px}
+  li{margin:.25em 0}
+  pre{
+    background:var(--code-bg); color:var(--code-ink); border-radius:10px;
+    padding:14px 16px; overflow-x:auto; font-size:13.5px; line-height:1.5;
+    font-family:"SF Mono",ui-monospace,"Cascadia Code",Consolas,monospace;
+  }
+  pre.diagram{color:var(--code-ink); font-size:12.5px}
+  code{
+    font-family:"SF Mono",ui-monospace,Consolas,monospace; font-size:.92em;
+    background:var(--accent-soft); color:var(--ink); padding:.1em .4em; border-radius:5px;
+  }
+  pre code{background:none; color:inherit; padding:0}
+  .concept{border-left:3px solid var(--accent); padding:4px 0 4px 14px; margin:1em 0; color:var(--muted)}
+  .pill{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px;margin-right:6px}
+  .pill.new{background:var(--accent-soft);color:var(--accent)}
+  .check{background:rgba(21,128,61,.08);border:1px solid rgba(21,128,61,.25);border-radius:10px;padding:10px 14px;margin:1em 0}
+  .check strong{color:var(--ok)}
+  table{border-collapse:collapse;width:100%;margin:1em 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:var(--accent-soft)}
+  footer{color:var(--muted);text-align:center;padding:40px 16px;font-size:14px}
+  #theme{
+    position:fixed; top:14px; right:14px; z-index:10;
+    background:var(--panel); border:1px solid var(--line); color:var(--ink);
+    border-radius:999px; padding:7px 14px; cursor:pointer; font-size:13px;
+  }
+  @media print{
+    #theme{display:none} body{background:#fff}
+    header.hero{background:none}
+    section.phase,nav.toc{break-inside:avoid; border-color:#ccc; box-shadow:none}
+    a{color:#000;text-decoration:none}
+  }
+</style>
+</head>
+<body>
+<button id="theme" onclick="toggleTheme()">◐ Tema</button>
+
+<header class="hero">
+  <h1>Laboratorio de Redes con <em>Network Namespaces</em></h1>
+  <p>Un recorrido paso a paso: desde dos ordenadores unidos por un cable hasta una red con Internet, DHCP, DNS, web, VPN, Tor y detección de ataques. Todo con <code>ip netns</code>, sin programas complicados.</p>
+</header>
+
+<div class="wrap">
+
+<section class="phase" id="intro">
+  <span class="tag">ANTES DE EMPEZAR</span>
+  <h2>¿Qué es esto y cómo funciona?</h2>
+  <p>Este laboratorio monta redes de ordenadores <strong>dentro de tu propio PC</strong>, sin máquinas virtuales. Para ello usamos tres piezas del kernel de Linux:</p>
+  <div class="concept"><strong>Network namespace (netns)</strong>: una "caja" aislada con su propia red (interfaces, IPs, rutas, firewall). Cada caja se comporta como un ordenador independiente. Lo creamos con <code>ip netns add</code>.</div>
+  <div class="concept"><strong>veth</strong>: un cable de red virtual con dos extremos. Lo que entra por un extremo sale por el otro. Conecta dos cajas, o una caja con un switch.</div>
+  <div class="concept"><strong>bridge</strong>: un switch virtual. Aprende qué equipo hay en cada puerto y reparte el tráfico. No necesita IP.</div>
+  <h3>Cómo se usa</h3>
+  <p>Cada fase es un script. Las fases <strong>01 a 05</strong> son independientes (cada una monta su red desde cero). A partir de la <strong>06</strong> se construye una sola red que va creciendo, así que esas se ejecutan en orden:</p>
+  <pre><code>sh 01_pc_pc.sh          # fases 01-05: pruébalas sueltas
+sh 06_internet.sh       # base de las siguientes
+sh 07_dhcp.sh
+sh 08_dns.sh
+sh 09_web.sh
+sh 10_vpn.sh
+sh 11_iptables.sh
+sh 12_tor.sh            # tarda ~2 min (espera a que Tor arranque)
+sh 13_deteccion_ataques.sh</code></pre>
+  <p>Todos los comandos llevan <code>sudo</code> porque crear redes requiere permisos de administrador. La limpieza total está comentada al final de las fases 12 y 13.</p>
+</section>
+
+<nav class="toc">
+  <h2>Las 13 fases</h2>
+  <ol>
+    <li><a href="#f01">PC ↔ PC</a></li>
+    <li><a href="#f02">PC — Switch — PC</a></li>
+    <li><a href="#f03">Dos redes y un router</a></li>
+    <li><a href="#f04">Cadena de 4 routers</a></li>
+    <li><a href="#f05">Red de routers (respaldo)</a></li>
+    <li><a href="#f06">Internet e IPs públicas</a></li>
+    <li><a href="#f07">DHCP</a></li>
+    <li><a href="#f08">DNS</a></li>
+    <li><a href="#f09">Servidores web</a></li>
+    <li><a href="#f10">VPN (WireGuard)</a></li>
+    <li><a href="#f11">Firewall (iptables)</a></li>
+    <li><a href="#f12">Red Tor</a></li>
+    <li><a href="#f13">Detección de ataques</a></li>
+  </ol>
+</nav>
+
+<!-- FASE 01 -->
+<section class="phase" id="f01">
+  <span class="tag">FASE 01 · 01_pc_pc.sh</span>
+  <h2>PC ↔ PC</h2>
+  <p class="goal">Conectar dos ordenadores directamente con un cable.</p>
+  <pre class="diagram">[pc1] 10.0.0.1 ══════════════════ 10.0.0.2 [pc2]</pre>
+  <h3>Pasos</h3>
+  <ol>
+    <li>Crear dos cajas: <code>ip netns add pc1</code> y <code>pc2</code>.</li>
+    <li>Crear un cable: <code>ip link add veth_pc1_pc2 type veth peer name veth_pc2_pc1</code>.</li>
+    <li>Meter cada extremo en su PC: <code>ip link set veth_pc1_pc2 netns pc1</code>.</li>
+    <li>Encender las interfaces (nacen apagadas), incluida <code>lo</code>.</li>
+    <li>Poner una IP a cada una, en la misma red <code>10.0.0.0/24</code>.</li>
+  </ol>
+  <div class="concept">Como están en la misma red, se ven directamente: no hace falta router.</div>
+  <div class="check"><strong>Comprobación:</strong> <code>ip netns exec pc1 ping -c3 10.0.0.2</code> y <code>ip neigh</code> para ver la MAC de pc2 aprendida por ARP.</div>
+</section>
+
+<!-- FASE 02 -->
+<section class="phase" id="f02">
+  <span class="tag">FASE 02 · 02_pc_sw_pc.sh</span>
+  <h2>PC — Switch — PC</h2>
+  <p class="goal">En vez de un cable directo, usar un switch para poder enchufar muchos PCs.</p>
+  <pre class="diagram">[pc1] 192.168.1.10 ──┐          ┌── 192.168.1.20 [pc2]
+                     └─[ sw1 ]──┘
+                      (bridge)</pre>
+  <h3>Lo nuevo</h3>
+  <ul>
+    <li>Creamos un switch: <code>ip link add sw1 type bridge</code>.</li>
+    <li>El extremo "PC" del cable va dentro del PC; el extremo "switch" se enchufa con <code>ip link set veth_sw1_pc1 master sw1</code>.</li>
+    <li>El switch no lleva IP: solo reenvía tramas.</li>
+  </ul>
+  <div class="check"><strong>Comprobación:</strong> <code>ping</code> entre los PCs y <code>bridge fdb show br sw1</code> para ver la tabla de MACs que ha aprendido el switch.</div>
+</section>
+
+<!-- FASE 03 -->
+<section class="phase" id="f03">
+  <span class="tag">FASE 03 · 03_pc_sw_r_sw_pc.sh</span>
+  <h2>Dos redes unidas por un router</h2>
+  <p class="goal">Comunicar dos redes distintas a través de un router.</p>
+  <pre class="diagram">RED A 192.168.1.0/24            RED B 192.168.2.0/24
+[pc1]─[sw1]─[ r1 ]─[sw2]─[pc2]
+ .1.10     .1.1  .2.1     .2.10</pre>
+  <div class="concept">Un <strong>router</strong> es una caja con dos interfaces (una en cada red) y el reenvío activado: <code>sysctl -w net.ipv4.ip_forward=1</code>.</div>
+  <div class="concept">La <strong>puerta de enlace (gateway)</strong> es a quién le manda un PC lo que no es de su red. Se pone con <code>ip route add default via 192.168.1.1</code>.</div>
+  <p>El router no necesita rutas: conoce las dos redes porque está conectado a ambas.</p>
+  <div class="check"><strong>Comprobación:</strong> <code>ping</code> de pc1 a pc2 y <code>tracepath -n 192.168.2.10</code> para ver que el paquete pasa por r1.</div>
+</section>
+
+<!-- FASE 04 -->
+<section class="phase" id="f04">
+  <span class="tag">FASE 04 · 04_cadena_routers.sh</span>
+  <h2>Cadena de 4 routers</h2>
+  <p class="goal">Varios routers en fila. Ahora cada uno NO conoce todas las redes: hay que enseñarle el camino con rutas estáticas.</p>
+  <pre class="diagram">[pc1]─[sw1]─[r1]──[r2]──[r3]──[r4]─[sw2]─[pc2]
+            10.0.12.0/30  10.0.23.0/30  10.0.34.0/30</pre>
+  <h3>Lo nuevo</h3>
+  <ul>
+    <li>Enlaces punto a punto entre routers con redes <code>/30</code> (solo 2 IPs útiles).</li>
+    <li><strong>Rutas estáticas</strong>: "para llegar a la red X, manda el paquete al router Y".</li>
+    <li>Hacen falta rutas de <strong>ida</strong> (hacia la red B) y de <strong>vuelta</strong> (hacia la red A) en cada router.</li>
+  </ul>
+  <pre><code>ip netns exec r1 ip route add 192.168.2.0/24 via 10.0.12.2
+ip netns exec r2 ip route add 192.168.2.0/24 via 10.0.23.2
+...</code></pre>
+  <div class="check"><strong>Comprobación:</strong> <code>tracepath</code> de pc1 a pc2 debe mostrar los 4 routers.</div>
+</section>
+
+<!-- FASE 05 -->
+<section class="phase" id="f05">
+  <span class="tag">FASE 05 · 05_red_routers.sh</span>
+  <h2>Red de routers con camino de respaldo</h2>
+  <p class="goal">Los routers forman una malla con varios caminos. Si un enlace se cae, el tráfico va por otro lado.</p>
+  <pre class="diagram">            ┌──[ r2 ]──┐
+[pc1]─[sw1]─[r1]       [r4]─[sw2]─[pc2]
+            └──[ r3 ]──┘
+Principal: r1→r2→r4     Respaldo: r1→r3→r4</pre>
+  <div class="concept">Con dos rutas a la misma red, se usa la de <strong>métrica más baja</strong>. La otra queda de reserva: <code>ip route add ... metric 100</code> / <code>metric 200</code>.</div>
+  <p>Con <code>ignore_routes_with_linkdown=1</code>, si un cable queda muerto el kernel deja de usar sus rutas y entra la de reserva.</p>
+  <div class="check"><strong>Comprobación:</strong> el script apaga el enlace r1–r2 y comprueba que pc1 sigue llegando a pc2 por r3. Luego lo repara.</div>
+</section>
+
+<!-- FASE 06 -->
+<section class="phase" id="f06">
+  <span class="tag">FASE 06 · 06_internet.sh</span>
+  <h2>Internet e IPs públicas</h2>
+  <p class="goal">Conectar la red a un "ISP" y, a través de él, a un Internet simulado y al Internet real del PC.</p>
+  <pre class="diagram">[srv1] 203.0.113.10 ─[inet]─[ isp ]═ HOST ═▶ Internet real
+                               │
+[pc1]─[sw1]─[ r1 ]═ red de routers ═[ r4 ]─[sw2]─[pc2]
+            (NAT)  198.51.100.2 = IP pública</pre>
+  <h3>Conceptos clave</h3>
+  <table>
+    <tr><th>IP privada</th><td>192.168.x.x, 10.x.x.x — solo valen dentro de casa.</td></tr>
+    <tr><th>IP pública</th><td>Única en Internet (usamos los rangos de documentación 198.51.100.0/24 y 203.0.113.0/24).</td></tr>
+    <tr><th>NAT (MASQUERADE)</th><td>r1 cambia la IP privada de origen por su IP pública al salir. <code>iptables -t nat -A POSTROUTING -o veth_r1_isp -j MASQUERADE</code></td></tr>
+    <tr><th>Ruta por defecto</th><td>"Lo que no sé dónde está, mándalo hacia Internet".</td></tr>
+  </table>
+  <div class="check"><strong>Comprobación:</strong> pc1 llega a srv1 (IP pública) y a <code>8.8.8.8</code> (Internet real). Desde Internet, srv1 <em>no</em> puede ver las IPs privadas: es lo que esperamos.</div>
+</section>
+
+<!-- FASE 07 -->
+<section class="phase" id="f07">
+  <span class="tag">FASE 07 · 07_dhcp.sh</span>
+  <h2>DHCP: IPs automáticas</h2>
+  <p class="goal">Que los PCs nuevos reciban IP, gateway y DNS automáticamente, en vez de ponerlo a mano.</p>
+  <div class="concept">El PC grita "¿alguien me da una IP?" (broadcast) y el servidor <strong>DHCP</strong> le contesta con IP + máscara + gateway + DNS, prestada por un tiempo (<em>lease</em>).</div>
+  <ul>
+    <li>Servidor: <code>dnsmasq</code> en r1 (red A) y r4 (red B), repartiendo el rango <code>.100–.150</code>.</li>
+    <li>Cliente: <code>dhcpcd</code> en pc3 y pc4. Nacen <strong>sin IP</strong> a propósito.</li>
+  </ul>
+  <pre><code>dnsmasq --interface=veth_r1_sw1 \
+  --dhcp-range=192.168.1.100,192.168.1.150,255.255.255.0,12h \
+  --dhcp-option=option:router,192.168.1.1</code></pre>
+  <div class="check"><strong>Comprobación:</strong> <code>ip addr</code> en pc3 muestra la IP que recibió, y el archivo <code>.leases</code> registra a quién se la dio.</div>
+</section>
+
+<!-- FASE 08 -->
+<section class="phase" id="f08">
+  <span class="tag">FASE 08 · 08_dns.sh</span>
+  <h2>DNS: nombres en vez de IPs</h2>
+  <p class="goal">Poder escribir <code>srv1.melvin.lab</code> en lugar de recordar la IP.</p>
+  <ul>
+    <li>Montamos un servidor DNS (<code>dnsmasq</code>) en Internet, en <code>203.0.113.53</code>.</li>
+    <li><strong>Zona propia</strong>: los nombres <code>*.melvin.lab</code> apuntados en un archivo tipo <code>/etc/hosts</code>.</li>
+    <li><strong>Reenviador</strong>: lo que no conoce (google.com…) se lo pregunta a <code>8.8.8.8</code>.</li>
+    <li>A cada PC se le dice qué DNS usar creando <code>/etc/netns/&lt;pc&gt;/resolv.conf</code>.</li>
+  </ul>
+  <div class="check"><strong>Comprobación:</strong> <code>dig +short srv1.melvin.lab</code> devuelve la IP. Usamos <code>dig</code> porque respeta el <code>resolv.conf</code> del namespace.</div>
+</section>
+
+<!-- FASE 09 -->
+<section class="phase" id="f09">
+  <span class="tag">FASE 09 · 09_web.sh</span>
+  <h2>Servidores web</h2>
+  <p class="goal">Montar una web pública en Internet y una intranet privada.</p>
+  <ul>
+    <li>Web pública en <code>203.0.113.80</code> (<code>web.melvin.lab</code>).</li>
+    <li>Intranet en pc1 (<code>192.168.1.10</code>), accesible solo desde dentro.</li>
+    <li>Servidor: <code>python3 -m http.server 80</code>. Registramos los nombres en el DNS y avisamos a dnsmasq con una señal <code>HUP</code>.</li>
+  </ul>
+  <div class="check"><strong>Comprobación:</strong> <code>curl http://203.0.113.80</code> funciona desde todas partes; la intranet se ve desde la red interna pero <em>no</em> desde Internet.</div>
+</section>
+
+<!-- FASE 10 -->
+<section class="phase" id="f10">
+  <span class="tag">FASE 10 · 10_vpn.sh</span>
+  <h2>VPN con WireGuard</h2>
+  <p class="goal">Un usuario que está en Internet (su "casa") entra a las redes privadas como si estuviera dentro, por un túnel cifrado.</p>
+  <pre class="diagram">[casa] 203.0.113.100  ══ TÚNEL CIFRADO (UDP 51820) ══  [ r1 ] 198.51.100.2
+  wg0: 10.10.0.2                                        wg0: 10.10.0.1</pre>
+  <div class="concept"><strong>WireGuard</strong>: cada extremo tiene una clave privada (secreta) y una pública (se la da al otro). La interfaz <code>wg0</code> cifra lo que sale y descifra lo que entra.</div>
+  <p><code>allowed-ips</code> indica qué IPs van por el túnel: la del túnel (10.10.0.0/24) y las redes privadas (192.168.0.0/16).</p>
+  <div class="check"><strong>Comprobación:</strong> antes de la VPN, casa no llega a pc1. Después, sí; y <code>wg show</code> muestra el último handshake.</div>
+</section>
+
+<!-- FASE 11 -->
+<section class="phase" id="f11">
+  <span class="tag">FASE 11 · 11_iptables.sh</span>
+  <h2>Firewall con iptables</h2>
+  <p class="goal">Proteger la red: hasta ahora todo estaba permitido. Ponemos cortafuegos en r1 y en el servidor web.</p>
+  <table>
+    <tr><th>INPUT</th><td>Tráfico dirigido al propio equipo.</td></tr>
+    <tr><th>FORWARD</th><td>Tráfico que el router reenvía.</td></tr>
+    <tr><th>Política DROP</th><td>"Todo prohibido salvo lo permitido": <code>iptables -P FORWARD DROP</code>.</td></tr>
+    <tr><th>ESTABLISHED,RELATED</th><td>Dejar pasar las respuestas de conexiones ya permitidas.</td></tr>
+    <tr><th>DNAT</th><td>Publicar un servicio interno: quien entra a <code>198.51.100.2:8080</code> llega a la intranet de pc1.</td></tr>
+  </table>
+  <div class="check"><strong>Comprobación:</strong> la red A sale a todo; la red B solo accede a la A por ping/web; desde Internet no se entra salvo por la VPN y el port forwarding. Las conexiones prohibidas dan <em>timeout</em> (DROP no responde).</div>
+</section>
+
+<!-- FASE 12 -->
+<section class="phase" id="f12">
+  <span class="tag">FASE 12 · 12_tor.sh</span>
+  <h2>Red Tor privada</h2>
+  <p class="goal">Montar nuestra propia red Tor (no la real) y navegar de forma anónima desde pc1.</p>
+  <pre class="diagram">[ da ] autoridad + entrada
+[ mid ] intermedio          circuito de 3 saltos cifrado
+[ exit ] salida ─▶ [ web ]
+pc1 = cliente Tor (SOCKS 127.0.0.1:9050)</pre>
+  <div class="concept">Un <strong>circuito</strong> usa 3 relays: entrada → intermedio → salida. Cada uno solo conoce al anterior y al siguiente, así que la web ve la IP del <em>exit</em>, nunca la de pc1.</div>
+  <div class="concept">La <strong>autoridad de directorio</strong> lleva la lista de relays (el "consenso"). Usamos <code>TestingTorNetwork 1</code> para que arranque rápido y permita IPs privadas.</div>
+  <div class="check"><strong>Comprobación:</strong> en el log de la web, la visita sin Tor llega desde 198.51.100.2 (r1); con Tor llega desde 203.0.113.203 (el exit). El origen real queda oculto.</div>
+</section>
+
+<!-- FASE 13 -->
+<section class="phase" id="f13">
+  <span class="tag">FASE 13 · 13_deteccion_ataques.sh</span>
+  <h2>Detección de ataques</h2>
+  <p class="goal">Montar un servidor "víctima" y una máquina "atacante" en un segmento aislado, lanzar ataques clásicos contra nuestro propio servidor y aprender a verlos y bloquearlos.</p>
+  <pre class="diagram">[atacante] 10.13.13.20 ─[ sw13 ]─ 10.13.13.10 [victima]
+                                      web: /login  /buscar</pre>
+  <h3>Herramientas de detección (todo con lo ya instalado)</h3>
+  <ul>
+    <li><strong>tcpdump</strong>: graba el tráfico a un <code>.pcap</code> que se abre con Wireshark.</li>
+    <li><strong>iptables -m string</strong>: mira dentro del paquete y caza las palabras típicas de una inyección SQL.</li>
+    <li><strong>iptables -m recent</strong>: cuenta conexiones por IP y bloquea a quien abre demasiadas en poco tiempo.</li>
+    <li>El <strong>log del propio servidor</strong>, que deja constancia de cada intento.</li>
+  </ul>
+  <h3>Ataque A · SQL injection</h3>
+  <p>Una web mal hecha construye la consulta pegando lo que escribe el usuario:</p>
+  <pre><code>SELECT * FROM productos WHERE nombre = '&lt;lo que escribe el usuario&gt;'</code></pre>
+  <p>Si el atacante escribe <code>' OR '1'='1</code> la condición siempre es verdadera; con <code>UNION SELECT</code> intentaría sacar otras tablas. Lo detectamos buscando esas palabras en el paquete:</p>
+  <pre><code>iptables -A INPUT -p tcp --dport 80 \
+  -m string --algo bm --icase --string "union select" \
+  -j LOG --log-prefix "ALERTA-SQLI "</code></pre>
+  <h3>Ataque B · Fuerza bruta</h3>
+  <p>El atacante prueba muchas contraseñas seguidas. Lo detectamos contando conexiones nuevas por IP:</p>
+  <pre><code>iptables -A INPUT -p tcp --dport 80 -m conntrack --ctstate NEW \
+  -m recent --update --seconds 60 --hitcount 4 --name BF -j DROP</code></pre>
+  <div class="concept"><strong>Usuarios y permisos en netns:</strong> un namespace aísla la <em>red</em>, pero comparte los usuarios del sistema (no tiene su propio <code>/etc/passwd</code>). Por eso, en vez de una base de datos real, simulamos el login y la BD con un pequeño servidor en Python; se ve igual de bien y es más sencillo.</div>
+  <div class="check"><strong>Informe final:</strong> el script muestra las alertas de iptables (<code>dmesg</code>), los contadores de reglas, las IPs en la lista <code>recent</code>, el log del servidor y el resumen del <code>.pcap</code>. Primero se ve el ataque <em>sin</em> defensas y luego <em>con</em> ellas, para comparar.</div>
+  <p style="color:var(--muted);font-size:14px;margin-top:1em">⚠️ Todos los ataques se lanzan contra el servidor del propio laboratorio, en un segmento aislado y con fines educativos.</p>
+</section>
+
+<footer>
+  Laboratorio de redes con <code>ip netns</code> · Documentación generada para el TFG.<br>
+  Cada fase incluye comentarios paso a paso dentro de su propio script <code>.sh</code>.
+</footer>
+
+</div>
+
+<script>
+  function applyTheme(t){
+    if(t) document.documentElement.setAttribute('data-theme',t);
+    else document.documentElement.removeAttribute('data-theme');
+  }
+  try{ applyTheme(localStorage.getItem('tema')); }catch(e){}
+  function toggleTheme(){
+    var cur = document.documentElement.getAttribute('data-theme');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    try{ localStorage.setItem('tema', next); }catch(e){}
+  }
+</script>
+</body>
+</html>
